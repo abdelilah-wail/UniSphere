@@ -1,4 +1,4 @@
-# 📱 Campus App — Flutter
+# 📱 UniSphere — Flutter
 
 A modern, feature-rich **university campus management app** built with Flutter. Designed with a premium UI/UX featuring glassmorphism, smooth animations, dark mode support, and a cohesive design system.
 
@@ -241,6 +241,3 @@ This project is for educational purposes. Feel free to use and modify for your o
 ## 👨‍💻 Author
 
 **Abdelilah Wail NEDJAR**
-
-- University of Constantine 2
-- Built with ❤️ and Flutter
