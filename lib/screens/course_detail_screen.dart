@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../models/course_detail_model.dart';
-import '../helpers/course_detail_data.dart';
+import '../services/course_service.dart';
+import '../services/api_service.dart';
 
 class CourseDetailScreen extends StatefulWidget {
-  final String courseName;
-  const CourseDetailScreen({super.key, required this.courseName});
+  final String courseId;
+  const CourseDetailScreen({super.key, required this.courseId});
 
   @override
   State<CourseDetailScreen> createState() => _CourseDetailScreenState();
@@ -15,16 +16,19 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _fadeController;
   late Animation<double> _fadeAnim;
-  late CourseDetailModel _course;
+
+  CourseDetailModel? _course;
+  bool _isLoading = true;
+  String? _error;
+  bool _enrolling = false;
 
   @override
   void initState() {
     super.initState();
-    _course = getCourseDetail(widget.courseName);
     _fadeController = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 500));
     _fadeAnim = CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
-    _fadeController.forward();
+    _fetchCourse();
   }
 
   @override
@@ -33,19 +37,90 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
     super.dispose();
   }
 
+  Future<void> _fetchCourse() async {
+    setState(() { _isLoading = true; _error = null; });
+
+    try {
+      final data = await CourseService.getCourseById(widget.courseId);
+      if (mounted) {
+        setState(() {
+          _course = CourseDetailModel.fromJson(data);
+          _isLoading = false;
+        });
+        _fadeController.forward();
+      }
+    } on ApiException catch (e) {
+      if (mounted) setState(() { _error = e.message; _isLoading = false; });
+    } catch (e) {
+      if (mounted) setState(() { _error = 'Connection error: $e'; _isLoading = false; });
+    }
+  }
+
+  Future<void> _handleEnroll() async {
+    if (_course == null || _enrolling) return;
+    setState(() => _enrolling = true);
+
+    try {
+      if (_course!.isEnrolled) {
+        await CourseService.unenroll(_course!.id);
+      } else {
+        await CourseService.enroll(_course!.id);
+      }
+      // Refresh course data
+      await _fetchCourse();
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _enrolling = false);
+    }
+  }
+
   int get _completedCount =>
-      _course.lessons.where((l) => l.status == LessonStatus.completed).length;
+      _course?.lessons.where((l) => l.status == LessonStatus.completed).length ?? 0;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    if (_isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    if (_error != null) {
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(_error!, style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5))),
+              const SizedBox(height: 12),
+              ElevatedButton(onPressed: _fetchCourse, child: const Text('Retry')),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final course = _course!;
+
     return Scaffold(
       body: SafeArea(
         child: FadeTransition(
           opacity: _fadeAnim,
           child: Column(
             children: [
-              // ─── App Bar ────────────────────────────
+              // ─── App Bar ──────────────────────────
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 24, 0),
                 child: Row(
@@ -56,31 +131,24 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
                         width: 42, height: 42,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: Theme.of(context)
-                              .colorScheme.onSurface.withOpacity(0.05),
+                          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.05),
                         ),
-                        child: Icon(Icons.arrow_back_ios_new_rounded,
-                            size: 18,
+                        child: Icon(Icons.arrow_back_ios_new_rounded, size: 18,
                             color: Theme.of(context).colorScheme.onSurface),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: Text(
-                        _course.name,
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: Theme.of(context).colorScheme.onSurface,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      child: Text(course.name,
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700,
+                              color: Theme.of(context).colorScheme.onSurface),
+                          overflow: TextOverflow.ellipsis),
                     ),
                   ],
                 ),
               ),
 
-              // ─── Scrollable Content ─────────────────
+              // ─── Scrollable Content ───────────────
               Expanded(
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
@@ -102,22 +170,20 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
                         children: [
                           Row(
                             children: [
-                              Text('Progress',
-                                  style: TextStyle(fontSize: 16,
-                                      fontWeight: FontWeight.w700,
-                                      color: Theme.of(context).colorScheme.onSurface)),
+                              Text('Progress', style: TextStyle(fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: Theme.of(context).colorScheme.onSurface)),
                               const Spacer(),
-                              Text('${(_course.progress * 100).round()}%',
+                              Text('${(course.progress * 100).round()}%',
                                   style: TextStyle(fontSize: 18,
-                                      fontWeight: FontWeight.w800,
-                                      color: AppTheme.primary)),
+                                      fontWeight: FontWeight.w800, color: AppTheme.primary)),
                             ],
                           ),
                           const SizedBox(height: 12),
                           ClipRRect(
                             borderRadius: BorderRadius.circular(6),
                             child: LinearProgressIndicator(
-                              value: _course.progress,
+                              value: course.progress,
                               minHeight: 8,
                               backgroundColor: isDark
                                   ? Colors.white.withOpacity(0.08)
@@ -126,10 +192,9 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
                             ),
                           ),
                           const SizedBox(height: 10),
-                          Text('$_completedCount of ${_course.totalLessons} lessons completed',
+                          Text('$_completedCount of ${course.totalLessons} lessons completed',
                               style: TextStyle(fontSize: 13,
-                                  color: Theme.of(context)
-                                      .colorScheme.onSurface.withOpacity(0.45))),
+                                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.45))),
                         ],
                       ),
                     ),
@@ -140,13 +205,13 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
                     Row(
                       children: [
                         _StatPill(icon: Icons.menu_book_rounded,
-                            value: '${_course.totalLessons}', label: 'Lessons'),
+                            value: '${course.totalLessons}', label: 'Lessons'),
                         const SizedBox(width: 10),
                         _StatPill(icon: Icons.access_time_rounded,
-                            value: _course.totalDuration, label: 'Duration'),
+                            value: course.totalDuration, label: 'Duration'),
                         const SizedBox(width: 10),
                         _StatPill(icon: Icons.star_outline_rounded,
-                            value: '${_course.credits}', label: 'Credits'),
+                            value: '${course.credits}', label: 'Credits'),
                       ],
                     ),
 
@@ -172,23 +237,20 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
                               shape: BoxShape.circle,
                               color: AppTheme.primary.withOpacity(0.1),
                             ),
-                            child: Icon(Icons.person_rounded, size: 26,
-                                color: AppTheme.primary),
+                            child: Icon(Icons.person_rounded, size: 26, color: AppTheme.primary),
                           ),
                           const SizedBox(width: 14),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(_course.instructor,
-                                    style: TextStyle(fontSize: 15,
-                                        fontWeight: FontWeight.w700,
+                                Text(course.instructor,
+                                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700,
                                         color: Theme.of(context).colorScheme.onSurface)),
                                 const SizedBox(height: 2),
-                                Text(_course.instructorRole,
+                                Text(course.instructorRole,
                                     style: TextStyle(fontSize: 13,
-                                        color: Theme.of(context)
-                                            .colorScheme.onSurface.withOpacity(0.45))),
+                                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.45))),
                               ],
                             ),
                           ),
@@ -207,34 +269,28 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
                     const SizedBox(height: 14),
 
                     // Lesson cards
-                    ...List.generate(_course.lessons.length, (index) {
-                      return _LessonCard(
-                        lesson: _course.lessons[index],
-                        delay: index,
-                      );
+                    ...List.generate(course.lessons.length, (index) {
+                      final lesson = course.lessons[index];
+                      return _LessonCard(lesson: lesson, index: index);
                     }),
 
                     // Resources
-                    if (_course.resources.isNotEmpty) ...[
+                    if (course.resources.isNotEmpty) ...[
                       const SizedBox(height: 24),
                       Text('Resources',
                           style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700,
                               color: Theme.of(context).colorScheme.onSurface)),
                       const SizedBox(height: 14),
-                      ..._course.resources.map((r) => Padding(
+                      ...course.resources.map((r) => Padding(
                         padding: const EdgeInsets.only(bottom: 10),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 14),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                           decoration: BoxDecoration(
-                            color: isDark
-                                ? const Color(0xFF1E1E1E)
-                                : Colors.white,
+                            color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
                             borderRadius: BorderRadius.circular(14),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(
-                                    isDark ? 0.15 : 0.04),
+                                color: Colors.black.withOpacity(isDark ? 0.15 : 0.04),
                                 blurRadius: 8, offset: const Offset(0, 2)),
                             ],
                           ),
@@ -246,20 +302,17 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
                                   shape: BoxShape.circle,
                                   color: const Color(0xFF2196F3).withOpacity(0.12),
                                 ),
-                                child: const Icon(Icons.description_outlined,
-                                    size: 18, color: Color(0xFF2196F3)),
+                                child: const Icon(Icons.description_outlined, size: 18,
+                                    color: Color(0xFF2196F3)),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
-                                child: Text(r,
-                                    style: TextStyle(fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                        color: Theme.of(context)
-                                            .colorScheme.onSurface)),
+                                child: Text(r, style: TextStyle(fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                    color: Theme.of(context).colorScheme.onSurface)),
                               ),
                               Icon(Icons.download_rounded, size: 20,
-                                  color: Theme.of(context)
-                                      .colorScheme.onSurface.withOpacity(0.3)),
+                                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.3)),
                             ],
                           ),
                         ),
@@ -271,7 +324,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
                 ),
               ),
 
-              // ─── Bottom CTA ─────────────────────────
+              // ─── Bottom CTA (Enroll / Continue) ─────
               Container(
                 padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
                 decoration: BoxDecoration(
@@ -284,11 +337,32 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
                 ),
                 child: SafeArea(
                   top: false,
-                  child: _CTAButton(
-                    label: _course.progress > 0
-                        ? 'Continue Learning'
-                        : 'Start Course',
-                    onTap: () {},
+                  child: GestureDetector(
+                    onTap: _enrolling ? null : _handleEnroll,
+                    child: Container(
+                      width: double.infinity, height: 54,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        gradient: LinearGradient(
+                          colors: [AppTheme.primary, AppTheme.primaryLight],
+                          begin: Alignment.topLeft, end: Alignment.bottomRight),
+                        boxShadow: [
+                          BoxShadow(color: AppTheme.primary.withOpacity(0.35),
+                              blurRadius: 16, offset: const Offset(0, 6)),
+                        ],
+                      ),
+                      child: Center(
+                        child: Text(
+                          _enrolling
+                              ? 'Please wait...'
+                              : course.isEnrolled
+                                  ? (course.progress > 0 ? 'Continue Learning' : 'Unenroll')
+                                  : 'Start Course',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700,
+                              color: Colors.white, letterSpacing: 0.3),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -300,7 +374,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen>
   }
 }
 
-// ── Stat Pill ─────────────────────────────────────────
+// ── Stat Pill ───────────────────────────────────────
 class _StatPill extends StatelessWidget {
   final IconData icon;
   final String value;
@@ -321,14 +395,11 @@ class _StatPill extends StatelessWidget {
           children: [
             Icon(icon, size: 20, color: AppTheme.primary),
             const SizedBox(height: 6),
-            Text(value,
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700,
-                    color: Theme.of(context).colorScheme.onSurface)),
+            Text(value, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700,
+                color: Theme.of(context).colorScheme.onSurface)),
             const SizedBox(height: 2),
-            Text(label,
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500,
-                    color: Theme.of(context)
-                        .colorScheme.onSurface.withOpacity(0.4))),
+            Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500,
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4))),
           ],
         ),
       ),
@@ -336,44 +407,14 @@ class _StatPill extends StatelessWidget {
   }
 }
 
-// ── Lesson Card ──────────────────────────────────────
-class _LessonCard extends StatefulWidget {
+// ── Lesson Card ─────────────────────────────────────
+class _LessonCard extends StatelessWidget {
   final LessonModel lesson;
-  final int delay;
-  const _LessonCard({required this.lesson, this.delay = 0});
-
-  @override
-  State<_LessonCard> createState() => _LessonCardState();
-}
-
-class _LessonCardState extends State<_LessonCard>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _fadeAnim;
-  late Animation<Offset> _slideAnim;
-  bool _isPressed = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 400));
-    _fadeAnim = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
-    _slideAnim = Tween<Offset>(begin: const Offset(0, 0.12), end: Offset.zero)
-        .animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
-    Future.delayed(Duration(milliseconds: 50 * widget.delay), () {
-      if (mounted) _controller.forward();
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+  final int index;
+  const _LessonCard({required this.lesson, required this.index});
 
   IconData get _statusIcon {
-    switch (widget.lesson.status) {
+    switch (lesson.status) {
       case LessonStatus.completed: return Icons.check_circle_rounded;
       case LessonStatus.current: return Icons.play_circle_filled_rounded;
       case LessonStatus.locked: return Icons.lock_rounded;
@@ -381,7 +422,7 @@ class _LessonCardState extends State<_LessonCard>
   }
 
   Color get _statusColor {
-    switch (widget.lesson.status) {
+    switch (lesson.status) {
       case LessonStatus.completed: return const Color(0xFF4CAF50);
       case LessonStatus.current: return AppTheme.primary;
       case LessonStatus.locked: return Colors.grey;
@@ -391,154 +432,61 @@ class _LessonCardState extends State<_LessonCard>
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isLocked = widget.lesson.status == LessonStatus.locked;
-    final isCurrent = widget.lesson.status == LessonStatus.current;
+    final isLocked = lesson.status == LessonStatus.locked;
+    final isCurrent = lesson.status == LessonStatus.current;
 
-    return FadeTransition(
-      opacity: _fadeAnim,
-      child: SlideTransition(
-        position: _slideAnim,
-        child: GestureDetector(
-          onTapDown: isLocked ? null : (_) => setState(() => _isPressed = true),
-          onTapUp: isLocked ? null : (_) {
-            setState(() => _isPressed = false);
-          },
-          onTapCancel: () => setState(() => _isPressed = false),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            decoration: BoxDecoration(
-              color: isCurrent
-                  ? (isDark
-                      ? AppTheme.primary.withOpacity(0.1)
-                      : AppTheme.primary.withOpacity(0.06))
-                  : (isDark ? const Color(0xFF1E1E1E) : Colors.white),
-              borderRadius: BorderRadius.circular(14),
-              border: isCurrent
-                  ? Border.all(color: AppTheme.primary.withOpacity(0.3), width: 1.5)
-                  : null,
-              boxShadow: [
-                if (!isLocked)
-                  BoxShadow(
-                    color: Colors.black.withOpacity(
-                        isDark ? (_isPressed ? 0.1 : 0.15) : (_isPressed ? 0.02 : 0.04)),
-                    blurRadius: _isPressed ? 4 : 10,
-                    offset: Offset(0, _isPressed ? 1 : 2),
-                  ),
-              ],
-            ),
-            child: Row(
-              children: [
-                // Number
-                Container(
-                  width: 38, height: 38,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: isCurrent
-                        ? AppTheme.primary
-                        : (isDark
-                            ? Colors.white.withOpacity(0.06)
-                            : const Color(0xFFF0EBF0)),
-                  ),
-                  child: Center(
-                    child: Text(
-                      widget.lesson.number,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: isCurrent
-                            ? Colors.white
-                            : Theme.of(context)
-                                .colorScheme.onSurface.withOpacity(isLocked ? 0.3 : 0.6),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                // Title + Duration
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.lesson.title,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w600,
-                          color: Theme.of(context)
-                              .colorScheme.onSurface.withOpacity(isLocked ? 0.35 : 1),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        widget.lesson.duration,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Theme.of(context)
-                              .colorScheme.onSurface.withOpacity(isLocked ? 0.2 : 0.4),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // Status icon
-                Icon(_statusIcon, size: 24, color: _statusColor),
-              ],
-            ),
-          ),
-        ),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: isCurrent
+            ? AppTheme.primary.withOpacity(isDark ? 0.15 : 0.06)
+            : (isDark ? const Color(0xFF1E1E1E) : Colors.white),
+        borderRadius: BorderRadius.circular(14),
+        border: isCurrent ? Border.all(color: AppTheme.primary.withOpacity(0.3), width: 1.5) : null,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.15 : 0.04),
+            blurRadius: 8, offset: const Offset(0, 2)),
+        ],
       ),
-    );
-  }
-}
-
-// ── CTA Button ───────────────────────────────────────
-class _CTAButton extends StatefulWidget {
-  final String label;
-  final VoidCallback? onTap;
-  const _CTAButton({required this.label, this.onTap});
-
-  @override
-  State<_CTAButton> createState() => _CTAButtonState();
-}
-
-class _CTAButtonState extends State<_CTAButton> {
-  bool _isPressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _isPressed = true),
-      onTapUp: (_) {
-        setState(() => _isPressed = false);
-        widget.onTap?.call();
-      },
-      onTapCancel: () => setState(() => _isPressed = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        width: double.infinity,
-        height: 54,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          gradient: LinearGradient(
-            colors: _isPressed
-                ? [AppTheme.primaryDark, AppTheme.primary]
-                : [AppTheme.primary, AppTheme.primaryLight],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+      child: Row(
+        children: [
+          // Lesson number
+          Container(
+            width: 36, height: 36,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: _statusColor.withOpacity(0.12),
+            ),
+            child: Center(
+              child: Text(lesson.number,
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700,
+                      color: _statusColor)),
+            ),
           ),
-          boxShadow: _isPressed ? [] : [
-            BoxShadow(
-              color: AppTheme.primary.withOpacity(0.35),
-              blurRadius: 16, offset: const Offset(0, 6)),
-          ],
-        ),
-        child: Center(
-          child: Text(widget.label,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700,
-                  color: Colors.white, letterSpacing: 0.3)),
-        ),
+          const SizedBox(width: 14),
+          // Lesson info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(lesson.title,
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600,
+                        color: isLocked
+                            ? Theme.of(context).colorScheme.onSurface.withOpacity(0.4)
+                            : Theme.of(context).colorScheme.onSurface),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 3),
+                Text(lesson.duration,
+                    style: TextStyle(fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4))),
+              ],
+            ),
+          ),
+          // Status icon
+          Icon(_statusIcon, size: 22, color: _statusColor),
+        ],
       ),
     );
   }

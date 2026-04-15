@@ -4,6 +4,8 @@ import '../widgets/glass_card.dart';
 import '../widgets/custom_input.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/floating_shapes.dart';
+import '../services/auth_service.dart';
+import '../services/api_service.dart';
 import 'home_screen.dart';
 
 class SignUpScreen extends StatefulWidget {
@@ -59,25 +61,10 @@ class _SignUpScreenState extends State<SignUpScreen>
     super.dispose();
   }
 
-  void _handleSignUp() {
-    if (_formKey.currentState!.validate() && _agreeTerms) {
-      setState(() => _isLoading = true);
-      // Simulate API call, then navigate to Home
-      Future.delayed(const Duration(seconds: 2), () {
-        if (mounted) {
-          setState(() => _isLoading = false);
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(
-              builder: (_) => HomeScreen(
-                onToggleTheme: widget.onToggleTheme,
-              ),
-            ),
-            (route) => false, // removes all previous routes
-          );
-        }
-      });
-    } else if (!_agreeTerms) {
+  // ─── REAL BACKEND REGISTER ─────────────────────────
+  Future<void> _handleSignUp() async {
+    // Check terms first
+    if (!_agreeTerms) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Please accept the Terms & Conditions'),
@@ -88,6 +75,63 @@ class _SignUpScreenState extends State<SignUpScreen>
           ),
         ),
       );
+      return;
+    }
+
+    // Validate form fields
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      await AuthService.register(
+        name: _nameCtrl.text.trim(),
+        email: _emailCtrl.text.trim(),
+        password: _passCtrl.text.trim(),
+      );
+
+      // ─── Success → Navigate to Home ───────────
+      if (mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(
+            builder: (_) => HomeScreen(
+              onToggleTheme: widget.onToggleTheme,
+            ),
+          ),
+          (route) => false,
+        );
+      }
+    } on ApiException catch (e) {
+      // ─── API error (email taken, etc.) ─────────
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.message),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      // ─── Network / unexpected error ────────────
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Connection error: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 

@@ -85,14 +85,19 @@ class EventCard extends StatelessWidget {
               child: SizedBox(
                 width: 120,
                 height: 110,
-                child: Image.network(
-                  event.imageUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    color: Colors.grey.withOpacity(0.2),
-                    child: const Icon(Icons.event, color: Colors.grey),
-                  ),
-                ),
+                child: (event.imageUrl != null && event.imageUrl!.isNotEmpty)
+                    ? Image.network(
+                        event.imageUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          color: Colors.grey.withOpacity(0.2),
+                          child: const Icon(Icons.event, color: Colors.grey),
+                        ),
+                      )
+                    : Container(
+                        color: Colors.grey.withOpacity(0.2),
+                        child: const Icon(Icons.event, color: Colors.grey),
+                      ),
               ),
             ),
           ],

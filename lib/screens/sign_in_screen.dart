@@ -5,6 +5,8 @@ import '../widgets/custom_input.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/social_button.dart';
 import '../widgets/floating_shapes.dart';
+import '../services/auth_service.dart';
+import '../services/api_service.dart';
 import 'sign_up_screen.dart';
 import 'home_screen.dart';
 
@@ -56,28 +58,56 @@ class _SignInScreenState extends State<SignInScreen>
     super.dispose();
   }
 
-  void _handleSignIn() {
-    if (_formKey.currentState!.validate()) {
-      setState(() => _isLoading = true);
-      // Simulate API call, then navigate to Home
-      Future.delayed(const Duration(seconds: 2), () {
-        if (mounted) {
-          setState(() => _isLoading = false);
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(
-              builder: (_) => HomeScreen(
-                onToggleTheme: widget.onToggleTheme,
-              ),
+  // ─── REAL BACKEND LOGIN ──────────────────────────
+  Future<void> _handleSignIn() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      await AuthService.login(
+        email: _emailCtrl.text.trim(),
+        password: _passCtrl.text.trim(),
+      );
+
+      // ─── Success → Navigate to Home ───────────
+      if (mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(
+            builder: (_) => HomeScreen(
+              onToggleTheme: widget.onToggleTheme,
             ),
-            (route) => false, // removes all previous routes
-          );
-        }
-      });
+          ),
+          (route) => false,
+        );
+      }
+    } on ApiException catch (e) {
+      // ─── API error (wrong password, user not found, etc.) ──
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.message),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      // ─── Network / unexpected error ────────────
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Connection error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // Social login → navigate directly to Home
+  // Social login → navigate directly to Home (placeholder for now)
   void _handleSocialLogin() {
     setState(() => _isLoading = true);
     Future.delayed(const Duration(seconds: 1), () {

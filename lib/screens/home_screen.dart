@@ -1,23 +1,19 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../helpers/nav_helper.dart';
-import '../models/category_model.dart';
-import '../models/class_model.dart';
 import '../models/news_model.dart';
 import '../models/event_model.dart';
-import '../widgets/category_card.dart';
-import '../widgets/class_card.dart';
-import '../widgets/news_card.dart';
-import '../widgets/event_card.dart';
+import '../models/category_model.dart';
+import '../services/news_service.dart';
+import '../services/event_service.dart';
+import '../services/user_service.dart';
 import '../widgets/bottom_nav_bar.dart';
+import '../widgets/category_card.dart';
 import '../models/notification_model.dart';
-import '../helpers/notification_data.dart';
+import '../helpers/notification_helper.dart';
 import '../widgets/notification_bell.dart';
 import '../widgets/news_detail_sheet.dart';
 import '../widgets/event_detail_sheet.dart';
-
-// Add state variable in _HomeScreenState:
-final List<NotificationModel> _notifications = getSampleNotifications();
 
 class HomeScreen extends StatefulWidget {
   final VoidCallback? onToggleTheme;
@@ -29,350 +25,366 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnim;
 
+  // ─── Data from API ──────────────────────────
+  List<NewsModel> _news = [];
+  List<EventModel> _events = [];
+  bool _isLoadingNews = true;
+  bool _isLoadingEvents = true;
+  String _userName = 'User';
+  bool _isLoadingUser = true;
+
+  // ─── Static categories (no API needed) ──────────
   final List<CategoryModel> _categories = const [
-    CategoryModel(
-      name: 'Computer Science',
-      imageUrl:
-          'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=300',
-    ),
-    CategoryModel(
-      name: 'Mathematics',
-      imageUrl:
-          'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=300',
-    ),
-    CategoryModel(
-      name: 'History & Geography',
-      imageUrl:
-          'https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?w=300',
-    ),
-    CategoryModel(
-      name: 'Art & Culture',
-      imageUrl:
-          'https://images.unsplash.com/photo-1513364776144-60967b0f800f?w=300',
-    ),
-    CategoryModel(
-      name: 'Physics',
-      imageUrl:
-          'https://images.unsplash.com/photo-1636466497217-26a8cbeaf0aa?w=300',
-    ),
-  ];
-
-  final List<ClassModel> _todayClasses = const [
-    ClassModel(
-      name: 'Digital Thinking',
-      startTime: '09:00',
-      endTime: '11:00',
-      location: 'Main auditorium',
-      teacher: 'Mam Mahnoor',
-    ),
-  ];
-
-  final List<NewsModel> _newsList = [
-    NewsModel(
-      title: 'FBISE',
-      description:
-          'The Federal Board of Intermediate and Secondary Education (FBISE) has officially announced the date for the results of the SSC Part I & II 1st Annual Examinations.',
-      fullContent:
-          'The Federal Board of Intermediate and Secondary Education (FBISE) has officially announced the date for the results of the Secondary School Certificate (SSC) Part I & II 1st Annual Examinations 2024.\n\nAccording to the official notification released by FBISE, the SSC Part I results will be announced on July 15, 2024, while the SSC Part II results will follow on July 22, 2024.\n\nStudents who appeared in the examinations can check their results online through the official FBISE website. The board has also set up a dedicated helpline for students who may have queries regarding their results.\n\nThe examinations were conducted across multiple centers nationwide, with over 200,000 students participating this year. The board has emphasized that the results have been compiled with utmost transparency and accuracy.\n\nStudents are advised to keep their roll number slips ready for checking results online. The detailed mark sheets will be available for collection from respective schools within two weeks of the result announcement.',
-      date: 'May 01',
-      source: 'Federal Board of Education',
-      badgeColor: AppTheme.primary,
-    ),
-    NewsModel(
-      title: 'Gaza',
-      description:
-          'The Pakistan Medical and Dental Council (PM&DC) has permitted medical/dental students from Gaza to complete their studies in Pakistan.',
-      fullContent:
-          'The Pakistan Medical and Dental Council (PM&DC) has permitted medical/dental students from Gaza to complete their studies in Pakistan, in a landmark humanitarian decision.\n\nThe PM&DC announced that displaced students from Gaza who were pursuing medical and dental degrees can now enroll in Pakistani medical colleges to continue their education without any additional entrance examination requirements.\n\nThis decision was made following a special meeting of the PM&DC executive committee, which reviewed the humanitarian crisis affecting students in the region. The council noted that education is a fundamental right and should not be disrupted by conflict.\n\nSeveral prominent medical colleges across Pakistan, including those in Islamabad, Lahore, and Karachi, have already expressed willingness to accommodate these students. Scholarships and financial aid programs are also being arranged to support the incoming students.\n\nThe Higher Education Commission (HEC) of Pakistan has also pledged its support, offering to facilitate the credit transfer process and ensure that the students\' previous academic work is recognized.',
-      date: 'June 07',
-      source: 'Pakistan Medical & Dental Council',
-      badgeColor: const Color(0xFF4CAF50),
-    ),
-    NewsModel(
-      title: 'LUMS',
-      description:
-          'LUMS recently celebrated the graduation of its latest cohort of talented graduates across multiple disciplines.',
-      fullContent:
-          'LUMS recently celebrated the graduation of its latest cohort of talented graduates across multiple disciplines in a grand convocation ceremony held at the main campus.\n\nThe Class of 2024 saw over 1,200 students receive their degrees in various programs including Business, Computer Science, Engineering, Social Sciences, and Law. The ceremony was graced by distinguished guests from academia, industry, and government.\n\nThe keynote address was delivered by a renowned tech entrepreneur who emphasized the importance of innovation, resilience, and ethical leadership in today\'s rapidly changing world.\n\nNotable achievements of this graduating class include:\n\n• 15 students graduated with Summa Cum Laude honors\n• 42 students received Dean\'s Honor Roll recognition\n• The class collectively completed over 50,000 hours of community service\n• 23 student-led startups were launched during their time at LUMS\n\nThe Vice Chancellor congratulated the graduates and encouraged them to become agents of positive change in society. Alumni from previous years also attended the event, creating a vibrant atmosphere of celebration and mentorship.',
-      date: 'May 01',
-      source: 'LUMS Communications',
-      badgeColor: AppTheme.primary,
-    ),
-  ];
-
-  final List<EventModel> _eventsList = const [
-    EventModel(
-      title: 'IDP Study Abroad Expo',
-      location: 'Islamabad',
-      date: 'Wed, 28 Feb 2024',
-      time: '10:00 AM - 5:00 PM',
-      venue: 'Serena Hotel, Convention Center',
-      organizer: 'IDP Education',
-      imageUrl:
-          'https://images.unsplash.com/photo-1540575467063-178a50c2df87?w=600',
-      description:
-          'The IDP Study Abroad Expo is your one-stop destination to explore international education opportunities. Meet representatives from over 100 universities across Australia, UK, Canada, USA, and New Zealand.\n\nWhat to expect:\n\n• One-on-one consultations with university representatives\n• Free IELTS preparation workshops\n• Scholarship information sessions\n• Visa guidance and application support\n• Live campus tours via VR headsets\n\nWhether you\'re looking for undergraduate, postgraduate, or PhD programs, this expo has something for every aspiring international student. Entry is free but registration is recommended to skip the queue.',
-    ),
-    EventModel(
-      title: 'Pathways to Development Conference',
-      location: 'Lahore',
-      date: 'Fri, 19 Apr 2024',
-      time: '9:00 AM - 4:30 PM',
-      venue: 'LUMS, Suleman Dawood School of Business',
-      organizer: 'LUMS Development Society',
-      imageUrl:
-          'https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=600',
-      description:
-          'The annual Pathways to Development Conference brings together thought leaders, policymakers, academics, and students to discuss Pakistan\'s most pressing development challenges.\n\nThis year\'s theme: "Innovation for Inclusive Growth"\n\nHighlights include:\n\n• Keynote by Dr. Atif Mian (Princeton University)\n• Panel discussions on education reform, climate resilience, and digital economy\n• Student research poster presentations\n• Networking lunch with industry professionals\n• Certificate of participation for all attendees\n\nThis conference is an excellent opportunity for students interested in public policy, economics, and social sciences.',
-    ),
-    EventModel(
-      title: 'IELTS Information Workshop',
-      location: 'Karachi',
-      date: 'Sat, 25 May 2024',
-      time: '2:00 PM - 5:00 PM',
-      venue: 'British Council, Clifton',
-      organizer: 'British Council Pakistan',
-      imageUrl:
-          'https://images.unsplash.com/photo-1523580494863-6f3031224c94?w=600',
-      description:
-          'Planning to take the IELTS exam? Attend this free information workshop hosted by the British Council to learn everything you need to know about the test.\n\nTopics covered:\n\n• IELTS test format and scoring explained\n• Tips and strategies for each section (Listening, Reading, Writing, Speaking)\n• Common mistakes and how to avoid them\n• Free practice materials and resources\n• Q&A session with certified IELTS trainers\n\nThis workshop is suitable for first-time test takers as well as those looking to improve their band score. Seats are limited, so early registration is encouraged.',
-    ),
+    CategoryModel(name: 'Courses', imageUrl: 'assets/images/course.png'),
+    CategoryModel(name: 'Schedule', imageUrl: 'assets/images/schedule.png'),
+    CategoryModel(name: 'Events', imageUrl: 'assets/images/events.png'),
   ];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _fadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+    _fadeAnim = CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
+    _fadeController.forward();
+    _fetchData();
+    // Load notifications from API
+    NotificationHelper.ensureLoaded().then((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _fadeController.dispose();
     super.dispose();
+  }
+
+  Future<void> _fetchData() async {
+    await Future.wait([_fetchNews(), _fetchEvents(), _fetchUser()]);
+  }
+
+  Future<void> _fetchUser() async {
+    try {
+      final userProfile = await UserService.getProfile();
+      if (mounted) {
+        setState(() {
+          final fullName = userProfile['name'] ?? 'User';
+          _userName = fullName.split(' ').first; // Just first name
+          _isLoadingUser = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Fetch user error: $e');
+      if (mounted) setState(() => _isLoadingUser = false);
+    }
+  }
+
+  Future<void> _fetchNews() async {
+    try {
+      final data = await NewsService.getNews(limit: 5);
+      if (mounted) {
+        setState(() {
+          _news = data.map((json) => NewsModel.fromJson(json)).toList();
+          _isLoadingNews = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingNews = false);
+    }
+  }
+
+  Future<void> _fetchEvents() async {
+    try {
+      final data = await EventService.getEvents(limit: 5);
+      if (mounted) {
+        setState(() {
+          _events = data.map((json) => EventModel.fromJson(json)).toList();
+          _isLoadingEvents = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingEvents = false);
+    }
+  }
+
+  Future<void> _refreshAll() async {
+    await Future.wait([
+      _fetchNews(),
+      _fetchEvents(),
+      _fetchUser(),
+      NotificationHelper.fetch(),
+    ]);
+    if (mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            // App Bar
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Spacer(),
-                    Text(
-                      'Home',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                    ),
-                    const Spacer(),
-                    // Dark mode toggle
-                    GestureDetector(
-                      onTap: widget.onToggleTheme,
-                      child: Container(
-                        width: 42,
-                        height: 42,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withOpacity(0.05),
+        child: FadeTransition(
+          opacity: _fadeAnim,
+          child: RefreshIndicator(
+            onRefresh: _refreshAll,
+            color: AppTheme.primary,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ─── Greeting + Theme & Notification (SAME LINE) ───
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // Left: Greeting text
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Hello, $_userName 👋',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withOpacity(0.5),
+                              ),
+                            ),
+                            Text(
+                              'Welcome Back!',
+                              style: TextStyle(
+                                fontSize: 26,
+                                fontWeight: FontWeight.w800,
+                                color: Theme.of(context).colorScheme.onSurface,
+                              ),
+                            ),
+                          ],
                         ),
-                        child: Icon(
-                          Theme.of(context).brightness == Brightness.dark
-                              ? Icons.light_mode_rounded
-                              : Icons.dark_mode_rounded,
-                          size: 22,
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.onSurface.withOpacity(0.6),
+                      ),
+                      // Right: Theme toggle + Notification bell side by side
+                      GestureDetector(
+                        onTap: widget.onToggleTheme,
+                        child: Container(
+                          width: 42,
+                          height: 42,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.05),
+                          ),
+                          child: Icon(
+                            isDark
+                                ? Icons.light_mode_rounded
+                                : Icons.dark_mode_rounded,
+                            size: 22,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurface.withOpacity(0.6),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    // Notification bell
-                    NotificationBell(
-                      notifications: _notifications,
-                      onNotificationTap: (notif) {
-                        setState(() => notif.isRead = true);
-                        // Navigate based on notif.type if needed
-                      },
-                      onMarkAllRead: () {
-                        setState(() {
-                          for (var n in _notifications) {
-                            n.isRead = true;
-                          }
-                        });
-                      },
-                      onViewAll: () {
-                        // Navigate to a full notifications page if you build one
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // Categories
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 24),
-                child: SizedBox(
-                  height: 135,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    itemCount: _categories.length,
-                    itemBuilder: (context, index) =>
-                        CategoryCard(category: _categories[index]),
+                      const SizedBox(width: 8),
+                      NotificationBell(
+                        notifications: NotificationHelper.notifications,
+                        onNotificationTap: (notif) async {
+                          await NotificationHelper.markAsRead(notif);
+                          if (mounted) setState(() {});
+                        },
+                        onMarkAllRead: () async {
+                          await NotificationHelper.markAllAsRead();
+                          if (mounted) setState(() {});
+                        },
+                      ),
+                    ],
                   ),
-                ),
-              ),
-            ),
 
-            // Today's Classes Header
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 28, 24, 14),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      "Today's Classes",
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: () {
-                        handleNavTap(
-                          context: context,
-                          currentIndex: 0,
-                          tappedIndex: 2,
-                          onToggleTheme: widget.onToggleTheme,
+                  const SizedBox(height: 24),
+
+                  // ─── Categories (3 items with asset images) ─
+                  SizedBox(
+                    height: 100,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _categories.length,
+                      itemBuilder: (context, index) {
+                        return Padding(
+                          padding: EdgeInsets.only(
+                            right: index < _categories.length - 1 ? 14 : 0,
+                          ),
+                          child: CategoryCard(
+                            category: _categories[index],
+                            onTap: () {
+                              switch (index) {
+                                case 0: // Courses
+                                  handleNavTap(
+                                    context: context,
+                                    currentIndex: 0,
+                                    tappedIndex: 1,
+                                    onToggleTheme: widget.onToggleTheme,
+                                  );
+                                  break;
+                                case 1: // Schedule
+                                  handleNavTap(
+                                    context: context,
+                                    currentIndex: 0,
+                                    tappedIndex: 2,
+                                    onToggleTheme: widget.onToggleTheme,
+                                  );
+                                  break;
+                                case 2: // Events → Profile tab
+                                  handleNavTap(
+                                    context: context,
+                                    currentIndex: 0,
+                                    tappedIndex: 4,
+                                    onToggleTheme: widget.onToggleTheme,
+                                  );
+                                  break;
+                              }
+                            },
+                          ),
                         );
                       },
-                      child: Row(
-                        children: [
-                          Text(
-                            'Open schedule',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.primary,
+                    ),
+                  ),
+
+                  const SizedBox(height: 28),
+
+                  // ─── News Section ─────────────────────
+                  Row(
+                    children: [
+                      Text(
+                        'Latest News',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        'See all',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+
+                  _isLoadingNews
+                      ? const Center(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(vertical: 20),
+                            child: CircularProgressIndicator(),
+                          ),
+                        )
+                      : _news.isEmpty
+                      ? Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 20),
+                          child: Center(
+                            child: Text(
+                              'No news yet',
+                              style: TextStyle(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withOpacity(0.4),
+                              ),
                             ),
                           ),
-                          const SizedBox(width: 4),
-                          Icon(
-                            Icons.chevron_right_rounded,
-                            color: AppTheme.primary,
-                            size: 20,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // Today's Classes List
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Column(
-                  children: _todayClasses
-                      .map(
-                        (c) => Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: ClassCard(classItem: c),
-                        ),
-                      )
-                      .toList(),
-                ),
-              ),
-            ),
-
-            // News / Events Tabs
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
-                child: TabBar(
-                  controller: _tabController,
-                  labelColor: AppTheme.primary,
-                  unselectedLabelColor: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withOpacity(0.45),
-                  labelStyle: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
-                  unselectedLabelStyle: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  indicatorColor: AppTheme.primary,
-                  indicatorWeight: 3,
-                  indicatorSize: TabBarIndicatorSize.label,
-                  tabs: const [
-                    Tab(text: 'News'),
-                    Tab(text: 'Events'),
-                  ],
-                  onTap: (_) => setState(() {}),
-                ),
-              ),
-            ),
-
-            // Tab Content
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
-                  child: _tabController.index == 0
-                      ? Column(
-                          key: const ValueKey('news'),
-                          children: _newsList
-                              .map(
-                                (n) => NewsCard(
-                                  news: n,
-                                  onTap: () => showNewsDetail(context, n),
-                                ),
-                              )
-                              .toList(),
                         )
                       : Column(
-                          key: const ValueKey('events'),
-                          children: _eventsList
+                          children: _news
                               .map(
-                                (e) => EventCard(
-                                  event: e,
-                                  onTap: () => showEventDetail(context, e),
+                                (article) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: _NewsCard(news: article),
                                 ),
                               )
                               .toList(),
                         ),
-                ),
+
+                  const SizedBox(height: 28),
+
+                  // ─── Events Section ───────────────────
+                  Row(
+                    children: [
+                      Text(
+                        'Upcoming Events',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        'See all',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+
+                  _isLoadingEvents
+                      ? const Center(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(vertical: 20),
+                            child: CircularProgressIndicator(),
+                          ),
+                        )
+                      : _events.isEmpty
+                      ? Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 20),
+                          child: Center(
+                            child: Text(
+                              'No events yet',
+                              style: TextStyle(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withOpacity(0.4),
+                              ),
+                            ),
+                          ),
+                        )
+                      : SizedBox(
+                          height: 200,
+                          child: ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: _events.length,
+                            itemBuilder: (context, index) {
+                              return Padding(
+                                padding: EdgeInsets.only(
+                                  right: index < _events.length - 1 ? 14 : 0,
+                                ),
+                                child: _EventCard(event: _events[index]),
+                              );
+                            },
+                          ),
+                        ),
+
+                  const SizedBox(height: 16),
+                ],
               ),
             ),
-          ],
+          ),
         ),
       ),
 
-      // ✅ Bottom Nav using handleNavTap
       bottomNavigationBar: BottomNavBar(
         currentIndex: 0,
         onTap: (index) {
@@ -383,6 +395,206 @@ class _HomeScreenState extends State<HomeScreen>
             onToggleTheme: widget.onToggleTheme,
           );
         },
+      ),
+    );
+  }
+}
+
+// ── News Card ───────────────────────────────────────
+class _NewsCard extends StatelessWidget {
+  final NewsModel news;
+  const _NewsCard({required this.news});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return GestureDetector(
+      onTap: () => showNewsDetail(context, news),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 6,
+              height: 50,
+              decoration: BoxDecoration(
+                color: news.badgeColor,
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    news.title,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    news.description,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacity(0.5),
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    news.date,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacity(0.35),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Event Card (with cover image + asset fallback) ──
+class _EventCard extends StatelessWidget {
+  final EventModel event;
+  const _EventCard({required this.event});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return GestureDetector(
+      onTap: () => showEventDetail(context, event),
+      child: Container(
+        width: 240,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(isDark ? 0.2 : 0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Event Cover Image
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: event.imageUrl != null && event.imageUrl!.isNotEmpty
+                  ? Image.network(
+                      event.imageUrl!,
+                      width: double.infinity,
+                      height: 80,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Image.asset(
+                        'assets/images/event_cover.png',
+                        width: double.infinity,
+                        height: 80,
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  : Image.asset(
+                      'assets/images/event_cover.png',
+                      width: double.infinity,
+                      height: 80,
+                      fit: BoxFit.cover,
+                    ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              event.title,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(
+                  Icons.location_on_outlined,
+                  size: 13,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withOpacity(0.4),
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    event.location,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withOpacity(0.45),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(
+                  Icons.calendar_today_outlined,
+                  size: 13,
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withOpacity(0.4),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  event.date,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withOpacity(0.45),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

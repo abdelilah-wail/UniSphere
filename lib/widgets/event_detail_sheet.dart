@@ -72,23 +72,25 @@ class _EventDetailSheet extends StatelessWidget {
                               topLeft: Radius.circular(20),
                               topRight: Radius.circular(20),
                             ),
-                            child: Image.network(
-                              event.imageUrl,
-                              height: 220,
-                              width: double.infinity,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Container(
-                                height: 220,
-                                color: isDark
-                                    ? const Color(0xFF1E1E1E)
-                                    : const Color(0xFFF0EBF0),
-                                child: Center(
-                                  child: Icon(Icons.event_rounded,
-                                      size: 56,
-                                      color: AppTheme.primary.withOpacity(0.25)),
-                                ),
-                              ),
-                            ),
+                            child: event.imageUrl != null && event.imageUrl!.isNotEmpty
+                                ? Image.network(
+                                    event.imageUrl!,
+                                    height: 160,
+                                    width: double.infinity,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => Image.asset(
+                                      'assets/images/event_cover.png',
+                                      height: 160,
+                                      width: double.infinity,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  )
+                                : Image.asset(
+                                    'assets/images/event_cover.png',
+                                    height: 160,
+                                    width: double.infinity,
+                                    fit: BoxFit.cover,
+                                  ),
                           ),
                           // Gradient overlay
                           Positioned(
@@ -129,7 +131,7 @@ class _EventDetailSheet extends StatelessWidget {
 
                       // Content below image
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 4, 24, 32),
+                        padding: const EdgeInsets.fromLTRB(24, 2, 24, 24),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -185,8 +187,8 @@ class _EventDetailSheet extends StatelessWidget {
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              event.description.isNotEmpty
-                                  ? event.description
+                              (event.description != null && event.description!.isNotEmpty)
+                                  ? event.description!
                                   : 'Join us for ${event.title} in ${event.location}. This event brings together students, educators, and professionals for an enriching experience. Don\'t miss this opportunity to learn, connect, and grow.',
                               style: TextStyle(
                                 fontSize: 15,

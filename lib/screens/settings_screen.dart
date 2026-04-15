@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../models/user_model.dart';
+import '../services/user_service.dart';
+import '../services/api_service.dart';
+import '../services/auth_service.dart';
+import 'sign_in_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final VoidCallback? onToggleTheme;
@@ -13,8 +18,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _pushNotifications = true;
   bool _emailNotifications = false;
   bool _darkMode = false;
-  final _nameCtrl = TextEditingController(text: 'Ammar Ali');
-  final _emailCtrl = TextEditingController(text: 'ammar.ali@university.edu');
+  final _nameCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _currentPassCtrl = TextEditingController();
+  final _newPassCtrl = TextEditingController();
+
+  bool _isLoading = true;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
 
   @override
   void didChangeDependencies() {
@@ -26,12 +42,146 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void dispose() {
     _nameCtrl.dispose();
     _emailCtrl.dispose();
+    _currentPassCtrl.dispose();
+    _newPassCtrl.dispose();
     super.dispose();
+  }
+
+  // ─── Load profile from API ────────────────────────
+  Future<void> _loadProfile() async {
+    try {
+      final data = await UserService.getProfile();
+      final user = UserModel.fromJson(data);
+      if (mounted) {
+        setState(() {
+          _nameCtrl.text = user.name;
+          _emailCtrl.text = user.email;
+          _pushNotifications = user.preferences.pushNotifications;
+          _emailNotifications = user.preferences.emailNotifications;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // ─── Save profile changes ─────────────────────────
+  Future<void> _saveChanges() async {
+    setState(() => _isSaving = true);
+
+    try {
+      await UserService.updateProfile(
+        name: _nameCtrl.text.trim(),
+        email: _emailCtrl.text.trim(),
+        preferences: {
+          'pushNotifications': _pushNotifications,
+          'emailNotifications': _emailNotifications,
+        },
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Profile updated successfully!'),
+            backgroundColor: const Color(0xFF4CAF50),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+        Navigator.pop(context);
+      }
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  // ─── Change password ──────────────────────────────
+  Future<void> _handleChangePassword() async {
+    final current = _currentPassCtrl.text.trim();
+    final newPass = _newPassCtrl.text.trim();
+
+    if (current.isEmpty || newPass.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please fill in both password fields'),
+            backgroundColor: Colors.orange),
+      );
+      return;
+    }
+
+    if (newPass.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('New password must be at least 6 characters'),
+            backgroundColor: Colors.orange),
+      );
+      return;
+    }
+
+    try {
+      await UserService.changePassword(
+        currentPassword: current,
+        newPassword: newPass,
+      );
+
+      if (mounted) {
+        _currentPassCtrl.clear();
+        _newPassCtrl.clear();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Password changed successfully!'),
+            backgroundColor: const Color(0xFF4CAF50),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  // ─── Logout ───────────────────────────────────────
+  Future<void> _handleLogout() async {
+    await AuthService.logout();
+    if (mounted) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => SignInScreen(onToggleTheme: widget.onToggleTheme)),
+        (route) => false,
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    if (_isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -92,14 +242,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 child: Container(
                                   width: 28, height: 28,
                                   decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: AppTheme.primary,
+                                    shape: BoxShape.circle, color: AppTheme.primary,
                                     border: Border.all(
-                                      color: isDark ? const Color(0xFF1A1A1A) : Colors.white,
-                                      width: 2),
+                                      color: isDark ? const Color(0xFF1A1A1A) : Colors.white, width: 2),
                                   ),
-                                  child: const Icon(Icons.camera_alt_rounded,
-                                      size: 14, color: Colors.white),
+                                  child: const Icon(Icons.camera_alt_rounded, size: 14, color: Colors.white),
                                 ),
                               ),
                             ],
@@ -162,17 +309,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _Card(
                     child: Column(
                       children: [
-                        _NavRow(icon: Icons.lock_outline_rounded,
-                            iconColor: const Color(0xFF0097A7),
-                            title: 'Change Password', onTap: () {}),
-                        _divider(context),
-                        _NavRow(icon: Icons.fingerprint_rounded,
-                            iconColor: const Color(0xFF4CAF50),
-                            title: 'Biometric Login', onTap: () {}),
-                        _divider(context),
-                        _NavRow(icon: Icons.devices_rounded,
-                            iconColor: const Color(0xFF607D8B),
-                            title: 'Active Sessions', onTap: () {}),
+                        _InputField(label: 'Current Password', controller: _currentPassCtrl,
+                            icon: Icons.lock_outline_rounded, obscureText: true),
+                        const SizedBox(height: 12),
+                        _InputField(label: 'New Password', controller: _newPassCtrl,
+                            icon: Icons.lock_reset_rounded, obscureText: true),
+                        const SizedBox(height: 12),
+                        GestureDetector(
+                          onTap: _handleChangePassword,
+                          child: Container(
+                            width: double.infinity, height: 44,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              color: AppTheme.primary.withOpacity(0.1),
+                            ),
+                            child: Center(
+                              child: Text('Change Password',
+                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600,
+                                      color: AppTheme.primary)),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -196,7 +353,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         _NavRow(icon: Icons.logout_rounded,
                             iconColor: Colors.red,
                             title: 'Log Out', titleColor: Colors.red,
-                            onTap: () {}),
+                            onTap: _handleLogout),
                       ],
                     ),
                   ),
@@ -204,7 +361,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const SizedBox(height: 28),
 
                   // Save button
-                  _SaveButton(onTap: () => Navigator.pop(context)),
+                  _SaveButton(
+                    label: _isSaving ? 'Saving...' : 'Save Changes',
+                    onTap: _isSaving ? null : _saveChanges,
+                  ),
 
                   const SizedBox(height: 16),
                 ],
@@ -243,8 +403,7 @@ class _Card extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1A1A1A) : Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-            color: AppTheme.primary.withOpacity(0.15), width: 1),
+        border: Border.all(color: AppTheme.primary.withOpacity(0.15), width: 1),
         boxShadow: [
           BoxShadow(color: Colors.black.withOpacity(isDark ? 0.15 : 0.04),
               blurRadius: 10, offset: const Offset(0, 2)),
@@ -260,8 +419,9 @@ class _InputField extends StatelessWidget {
   final TextEditingController controller;
   final IconData icon;
   final TextInputType keyboardType;
+  final bool obscureText;
   const _InputField({required this.label, required this.controller,
-      required this.icon, this.keyboardType = TextInputType.text});
+      required this.icon, this.keyboardType = TextInputType.text, this.obscureText = false});
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -273,17 +433,14 @@ class _InputField extends StatelessWidget {
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
-        style: TextStyle(fontSize: 15,
-            color: Theme.of(context).colorScheme.onSurface),
+        obscureText: obscureText,
+        style: TextStyle(fontSize: 15, color: Theme.of(context).colorScheme.onSurface),
         decoration: InputDecoration(
           hintText: label,
-          hintStyle: TextStyle(color: Theme.of(context)
-              .colorScheme.onSurface.withOpacity(0.35)),
-          prefixIcon: Icon(icon, size: 22,
-              color: AppTheme.primary.withOpacity(0.5)),
+          hintStyle: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.35)),
+          prefixIcon: Icon(icon, size: 22, color: AppTheme.primary.withOpacity(0.5)),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16, vertical: 16),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         ),
       ),
     );
@@ -305,18 +462,12 @@ class _ToggleRow extends StatelessWidget {
       child: Row(
         children: [
           Container(width: 40, height: 40,
-              decoration: BoxDecoration(shape: BoxShape.circle,
-                  color: iconColor.withOpacity(0.12)),
+              decoration: BoxDecoration(shape: BoxShape.circle, color: iconColor.withOpacity(0.12)),
               child: Icon(icon, size: 20, color: iconColor)),
           const SizedBox(width: 14),
           Expanded(child: Text(title, style: TextStyle(fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: Theme.of(context).colorScheme.onSurface))),
-          Switch.adaptive(
-            value: value,
-            onChanged: onChanged,
-            activeColor: AppTheme.primary,
-          ),
+              fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface))),
+          Switch.adaptive(value: value, onChanged: onChanged, activeColor: AppTheme.primary),
         ],
       ),
     );
@@ -348,8 +499,7 @@ class _NavRowState extends State<_NavRow> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 120),
         padding: const EdgeInsets.symmetric(vertical: 12),
-        color: _p ? Theme.of(context).colorScheme.onSurface.withOpacity(0.03)
-            : Colors.transparent,
+        color: _p ? Theme.of(context).colorScheme.onSurface.withOpacity(0.03) : Colors.transparent,
         child: Row(
           children: [
             Container(width: 40, height: 40,
@@ -374,8 +524,9 @@ class _NavRowState extends State<_NavRow> {
 }
 
 class _SaveButton extends StatefulWidget {
+  final String label;
   final VoidCallback? onTap;
-  const _SaveButton({this.onTap});
+  const _SaveButton({required this.label, this.onTap});
   @override
   State<_SaveButton> createState() => _SaveButtonState();
 }
@@ -402,8 +553,8 @@ class _SaveButtonState extends State<_SaveButton> {
                 blurRadius: 16, offset: const Offset(0, 6)),
           ],
         ),
-        child: const Center(child: Text('Save Changes',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700,
+        child: Center(child: Text(widget.label,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700,
                 color: Colors.white, letterSpacing: 0.3))),
       ),
     );

@@ -1,6 +1,8 @@
-# 📱 Campus App — Flutter
+# 📱 UniSphere — Flutter
 
 A modern, feature-rich **university campus management app** built with Flutter. Designed with a premium UI/UX featuring glassmorphism, smooth animations, dark mode support, and a cohesive design system.
+
+> ✅ **Status**: Complete & Production Ready
 
 ---
 
@@ -66,6 +68,13 @@ A modern, feature-rich **university campus management app** built with Flutter. 
 - **Stats row** — Credits, GPA, Year student
 - **Statistics card** — Attendance 90%, Task & Work 70%, Quiz 85% with Mark Attend button
 - **Dashboard** → Setting, Achievement, Privacy (with navigation)
+
+### 📍 Location
+
+- **Interactive map** showing campus locations
+- **Campus landmarks** and facilities with detailed information
+- **Real-time navigation** to discover campus buildings and services
+- **Location-based notifications** for nearby events and classes
 
 ### ⚙️ Settings
 

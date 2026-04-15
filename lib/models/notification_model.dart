@@ -16,4 +16,32 @@ class NotificationModel {
     required this.timestamp,
     this.isRead = false,
   });
+
+  factory NotificationModel.fromJson(Map<String, dynamic> json) {
+    NotificationType type;
+    switch (json['type']) {
+      case 'schedule':
+        type = NotificationType.schedule;
+        break;
+      case 'announcement':
+        type = NotificationType.announcement;
+        break;
+      case 'assignment':
+        type = NotificationType.assignment;
+        break;
+      default:
+        type = NotificationType.system;
+    }
+
+    return NotificationModel(
+      id: json['_id'] ?? '',
+      type: type,
+      title: json['title'] ?? '',
+      description: json['description'] ?? '',
+      timestamp: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'])
+          : DateTime.now(),
+      isRead: json['isRead'] ?? false,
+    );
+  }
 }

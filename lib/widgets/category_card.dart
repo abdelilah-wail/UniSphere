@@ -40,7 +40,7 @@ class CategoryCard extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               // Category image
-              Image.network(
+              Image.asset(
                 category.imageUrl,
                 fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => Container(

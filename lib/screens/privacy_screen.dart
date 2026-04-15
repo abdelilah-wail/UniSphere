@@ -16,7 +16,6 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       body: SafeArea(
         child: Column(

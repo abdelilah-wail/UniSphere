@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import '../screens/home_screen.dart';
 import '../screens/courses_screen.dart';
 import '../screens/schedule_screen.dart';
-import '../screens/result_screen.dart';
 import '../screens/profile_screen.dart';
+import '../screens/location_screen.dart';
 
 void handleNavTap({
   required BuildContext context,
@@ -57,12 +56,12 @@ void handleNavTap({
       }
       break;
     case 3:
-      // Go to Result
+      // Go to Location (was Result)
       if (currentIndex == 0) {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => ResultScreen(onToggleTheme: onToggleTheme),
+            builder: (_) => LocationScreen(onToggleTheme: onToggleTheme),
           ),
         );
       } else {
@@ -70,7 +69,7 @@ void handleNavTap({
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => ResultScreen(onToggleTheme: onToggleTheme),
+            builder: (_) => LocationScreen(onToggleTheme: onToggleTheme),
           ),
         );
       }

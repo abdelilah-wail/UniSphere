@@ -20,7 +20,6 @@ class _NewsDetailSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final screenHeight = MediaQuery.of(context).size.height;
 
     return BackdropFilter(
       filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
@@ -119,7 +118,7 @@ class _NewsDetailSheet extends StatelessWidget {
                     controller: scrollController,
                     padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
                     children: [
-                      // Featured Image Placeholder
+                      // Featured Image
                       if (news.imageUrl != null &&
                           news.imageUrl!.isNotEmpty)
                         ClipRRect(
@@ -129,12 +128,27 @@ class _NewsDetailSheet extends StatelessWidget {
                             height: 200,
                             width: double.infinity,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) =>
-                                _imagePlaceholder(isDark),
+                            errorBuilder: (_, __, ___) => ClipRRect(
+                              borderRadius: BorderRadius.circular(16),
+                              child: Image.asset(
+                                'assets/images/event_cover.png',
+                                height: 200,
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
                           ),
                         )
                       else
-                        _imagePlaceholder(isDark),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: Image.asset(
+                            'assets/images/event_cover.png',
+                            height: 200,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
 
                       const SizedBox(height: 20),
 
@@ -227,35 +241,6 @@ class _NewsDetailSheet extends StatelessWidget {
             ),
           );
         },
-      ),
-    );
-  }
-
-  Widget _imagePlaceholder(bool isDark) {
-    return Container(
-      height: 180,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: isDark
-            ? const Color(0xFF1E1E1E)
-            : const Color(0xFFF0EBF0),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.newspaper_rounded, size: 44,
-              color: AppTheme.primary.withOpacity(0.25)),
-          const SizedBox(height: 8),
-          Text(
-            news.title,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: AppTheme.primary.withOpacity(0.4),
-            ),
-          ),
-        ],
       ),
     );
   }
